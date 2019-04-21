@@ -1,4 +1,3 @@
-import { CommonToken } from "./CommonToken";
 import { CommonTokenStream } from "./CommonTokenStream";
 import { IncrementalParserRuleContext } from "./IncrementalParserRuleContext";
 import { IncrementalTokenStream } from "./IncrementalTokenStream";
@@ -7,6 +6,7 @@ import { ParserRuleContext } from "./ParserRuleContext";
 import { Token } from "./Token";
 import { ParseTreeListener } from "./tree/ParseTreeListener";
 import { ParseTreeWalker } from "./tree/ParseTreeWalker";
+import { TokenChange, TokenChangeType } from "./TokenChange";
 
 // This is a binary search variant, but instead of looking for a specific individual number,
 // we are looking to see if any of the values in the list fall into a given range.
@@ -67,26 +67,6 @@ function findAdjustedTokenIndex(array: TokenOffsetRange[], tokenIndex: number) {
 interface TokenOffsetRange {
 	interval: Interval;
 	indexOffset: number;
-}
-
-/**
- *  Definition of a token change:
- *  ADDED = A new token that did not exist before
- *  CHANGED = A token that was in the stream before but changed in some way.
- *  REMOVED = A token that no longer exists in the stream.
- *
- * Token changes may *not* overlap.
- * You also need to account for hidden tokens (but not *skipped* ones).
- */
-export enum TokenChangeType {
-	ADDED,
-	CHANGED,
-	REMOVED,
-}
-export interface TokenChange {
-	changeType: TokenChangeType;
-	newToken?: CommonToken;
-	oldToken?: CommonToken;
 }
 
 /**
@@ -173,7 +153,7 @@ export class IncrementalParserData {
 				indexToPush = tokenChange.oldToken!.tokenIndex;
 			} else if (tokenChange.changeType === TokenChangeType.ADDED) {
 				this.changedTokens.push(tokenChange.newToken!.tokenIndex);
-				// The indexes move forward one to account for the removed token.
+				// The indexes move forward one to account for the added token.
 				indexOffset += 1;
 				indexToPush = tokenChange.newToken!.tokenIndex;
 			}

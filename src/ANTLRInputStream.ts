@@ -10,6 +10,7 @@ import { Arrays } from "./misc/Arrays";
 import { Override } from "./Decorators";
 import { IntStream } from "./IntStream";
 import { Interval } from "./misc/Interval";
+import { LookaheadTrackingCharStream } from "./LookaheadTrackingCharStream";
 
 const READ_BUFFER_SIZE: number = 1024;
 const INITIAL_BUFFER_SIZE: number = 1024;
@@ -23,7 +24,7 @@ const INITIAL_BUFFER_SIZE: number = 1024;
  *
  * @deprecated as of 4.7, please use `CharStreams` interface.
  */
-export class ANTLRInputStream implements CharStream {
+export class ANTLRInputStream implements LookaheadTrackingCharStream {
 	/** The data being scanned */
 	protected data: string;
 
@@ -32,6 +33,12 @@ export class ANTLRInputStream implements CharStream {
 
 	/** 0..n-1 index into string of next char */
 	protected p: number = 0;
+
+	/** Minumum/maximum amount of lookahead used since reset */
+	protected _minMaxLookahead = Interval.of(0, 0);
+
+	/** Last lookahead used. */
+	protected lastLA = 0;
 
 	/** What is name or source of this char stream? */
 	public name?: string;
@@ -69,6 +76,10 @@ export class ANTLRInputStream implements CharStream {
 		if (i === 0) {
 			return 0; // undefined
 		}
+		if (i !== this.lastLA) {
+			this.lastLA = i;
+			this._minMaxLookahead = this._minMaxLookahead.union(Interval.of(i, i));
+		}
 		if (i < 0) {
 			i++; // e.g., translate LA(-1) to use offset i=0; then data[p+0-1]
 			if ((this.p + i - 1) < 0) {
@@ -82,6 +93,7 @@ export class ANTLRInputStream implements CharStream {
 		}
 		//System.out.println("char LA("+i+")="+(char)data[p+i-1]+"; p="+p);
 		//System.out.println("LA("+i+"); p="+p+" n="+n+" data.length="+data.length);
+
 		return this.data.charCodeAt(this.p + i - 1);
 	}
 
@@ -157,4 +169,15 @@ export class ANTLRInputStream implements CharStream {
 
 	@Override
 	public toString() { return this.data; }
+
+	@Override
+	public get minMaxLookahead(): Interval {
+		return this._minMaxLookahead;
+	}
+
+	@Override
+	public resetMinMaxLookahead(): void {
+		this._minMaxLookahead = Interval.of(0, 0);
+		this.lastLA = 0;
+	}
 }

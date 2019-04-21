@@ -911,11 +911,21 @@ LexerFile(file, lexer, namedActions) ::= <<
 import { ATN } from "<basePath()>/atn/ATN";
 import { ATNDeserializer } from "<basePath()>/atn/ATNDeserializer";
 import { CharStream } from "<basePath()>/CharStream";
+<if(file.factory.grammar.ast.cmdLineOptions.("incremental"))>
+import { IncrementalCommonToken } from "<basePath()>/IncrementalCommonToken";
+import { IncrementalLexer } from "<basePath()>/IncrementalLexer";
+<endif>
 import { Lexer } from "<basePath()>/Lexer";
 import { LexerATNSimulator } from "<basePath()>/atn/LexerATNSimulator";
+<if(file.factory.grammar.ast.cmdLineOptions.("incremental"))>
+import { LookaheadTrackingCharStream } from "<basePath()>/LookaheadTrackingCharStream";
+<endif>
 import { NotNull } from "<basePath()>/Decorators";
 import { Override } from "<basePath()>/Decorators";
 import { RuleContext } from "<basePath()>/RuleContext";
+<if(file.factory.grammar.ast.cmdLineOptions.("incremental"))>
+import { TextChange } from "<basePath()>/TextChange";
+<endif>
 import { Vocabulary } from "<basePath()>/Vocabulary";
 import { VocabularyImpl } from "<basePath()>/VocabularyImpl";
 
@@ -929,7 +939,11 @@ import * as Utils from "<basePath()>/misc/Utils";
 >>
 
 Lexer(lexer, atn, actionFuncs, sempredFuncs, superClass, isLexer=true) ::= <<
+<if(file.factory.grammar.ast.cmdLineOptions.("incremental"))>
+export <if(lexer.abstractRecognizer)>abstract <endif>class <lexer.name> extends <superClass; null="IncrementalLexer"> {
+<else>
 export <if(lexer.abstractRecognizer)>abstract <endif>class <lexer.name> extends <superClass; null="Lexer"> {
+<endif>
 	<lexer.tokens:{k | public static readonly <k> = <lexer.tokens.(k)>;}; separator="\n">
 	<lexer.channels:{c | public static readonly <c> = <lexer.channels.(c)>;}; separator="\n">
 	<rest(lexer.modes):{m | public static readonly <m> = <i>;}; separator="\n">
@@ -952,12 +966,33 @@ export <if(lexer.abstractRecognizer)>abstract <endif>class <lexer.name> extends 
 	// tslint:enable:no-trailing-whitespace
 
 	<namedActions.members>
+<if(file.factory.grammar.ast.cmdLineOptions.("incremental"))>
+	constructor(input: LookaheadTrackingCharStream);
+	constructor(
+		input: LookaheadTrackingCharStream,
+		oldTokens: IncrementalCommonToken[],
+		changeList: TextChange[],
+	);
 
+	constructor(
+		input?: LookaheadTrackingCharStream,
+		oldTokens?: IncrementalCommonToken[],
+		changeList?: TextChange[],
+	) {
+		if (!input) { throw new Error("We must have at least an input stream"); }
+		if (oldTokens) {
+			super(input, oldTokens, changeList!);
+		} else {
+			super(input);
+		}
+		this._interp = new LexerATNSimulator(<lexer.name>._ATN, this);
+	}
+<else>
 	constructor(input: CharStream) {
 		super(input);
 		this._interp = new LexerATNSimulator(<lexer.name>._ATN, this);
 	}
-
+<endif>
 	// @Override
 	public get grammarFileName(): string { return "<lexer.grammarFileName>"; }
 

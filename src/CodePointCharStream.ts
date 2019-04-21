@@ -9,6 +9,7 @@ import { CodePointBuffer } from "./CodePointBuffer";
 import { IntStream } from "./IntStream";
 import { Interval } from "./misc/Interval";
 import { Override } from "./Decorators";
+import { LookaheadTrackingCharStream } from "./LookaheadTrackingCharStream";
 
 /**
  * Alternative to {@link ANTLRInputStream} which treats the input
@@ -18,12 +19,18 @@ import { Override } from "./Decorators";
  * Use this if you need to parse input which potentially contains
  * Unicode values > U+FFFF.
  */
-export class CodePointCharStream implements CharStream {
+export class CodePointCharStream implements LookaheadTrackingCharStream {
 	private readonly _array: Uint8Array | Uint16Array | Int32Array;
 	private readonly _size: number;
 	private readonly _name: string;
 
 	private _position: number;
+
+	/** Minumum/maximum amount of lookahead used since reset */
+	protected _minMaxLookahead = Interval.of(0, 0);
+
+	/** Last lookahead used. */
+	protected lastLA = 0;
 
 	// Use the factory method {@link #fromBuffer(CodePointBuffer)} to
 	// construct instances of this type.
@@ -122,6 +129,10 @@ export class CodePointCharStream implements CharStream {
 	@Override
 	public LA(i: number): number {
 		let offset: number;
+		if (i !== this.lastLA) {
+			this.lastLA = i;
+			this._minMaxLookahead = this.minMaxLookahead.union(Interval.of(i, i));
+		}
 		switch (Math.sign(i)) {
 			case -1:
 				offset = this.index + i;
@@ -158,5 +169,16 @@ export class CodePointCharStream implements CharStream {
 		} else {
 			return String.fromCharCode(...Array.from(this._array.subarray(startIdx, startIdx + len)));
 		}
+	}
+
+	@Override
+	public get minMaxLookahead(): Interval {
+		return this._minMaxLookahead;
+	}
+
+	@Override
+	public resetMinMaxLookahead(): void {
+		this._minMaxLookahead = Interval.of(0, 0);
+		this.lastLA = 0;
 	}
 }
