@@ -65,10 +65,6 @@ export abstract class IncrementalLexer extends Lexer {
 			this.changedRanges = changeList;
 		}
 	}
-
-	private computeLookback(tokenList: IncrementalCommonToken[]) {
-		// TODO : Lookbehind properly
-	}
 	/**
 	 *  Remove EOF token from token list.
 	 *

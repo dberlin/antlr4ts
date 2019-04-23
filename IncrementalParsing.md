@@ -2,7 +2,7 @@
 
 #### Basics
 
-We'll start by explaining how incremental parsing works for LL, then how we store that data. We are not going to talk about incremental _lexing_.
+We'll start by explaining how incremental parsing works for LL, then how we store that data. We are not going to talk about incremental _lexing_ here.
 
 Let's start with LL(1) and ignore semantic predicates and other things. Fundamentally, the problem of incremental parsing is one of knowing what can change about how a given parser rule processes the tokens (and the resulting output parse tree) given a set of new/deleted/changed tokens. For LL(1), this turns out to be very easy. Given LL(1) can only look ahead one token, the only token changes that can even matter to a given parser rule (and the output parse tree) are changes to whatever the tokens the rule looked at last time, plus 1 token forward. If no tokens have changed in that [startToken, stopToken+1] bound, the rule cannot be affected (assuming it gets run). The referenced paper explains this in detail and shows how to make it work for LR parsers. Terrence also explains variants of the above in a few github issues where people have asked about incremental parsing.
 
@@ -57,7 +57,9 @@ Tree fixup is actually the most expensive part of the parser data right now, and
 - We use the parselistener interface as an easy way to ensure we get to see entry/
   exit events at the right time. This turned out to be easier than handling
   recursion/left factoring through overriding the relevant parser interface pieces.
-- Top level recursion contexts are now reused, but we won't reuse individaul recursion contexts yet.
+- Top level recursion contexts are now reused, but we won't reuse individual recursion contexts yet.
+- It's possible to only touch changed contexts with changes to the parser driver.
+
 
 
 #### References
