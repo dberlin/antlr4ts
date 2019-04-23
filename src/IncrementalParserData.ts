@@ -188,10 +188,12 @@ export class IncrementalParserData {
 			}
 			// Push the range this change starts at, and what the effect is on
 			// the index.
-			tokenOffsets.push({
-				indexOffset,
-				interval: Interval.of(indexToPush, indexToPush),
-			});
+			if (indexOffset !== 0) {
+				tokenOffsets.push({
+					indexOffset,
+					interval: Interval.of(indexToPush, indexToPush),
+				});
+			}
 		}
 		// End the final range at length of the old token stream. That is the
 		// last possible thing we need to offset.
