@@ -11,8 +11,12 @@ import { Interval } from "./misc/Interval";
  *  how much lookahead is being used.
  */
 export interface LookaheadTrackingCharStream extends CharStream {
+	// This is tracked per-token
 	minMaxLookahead: Interval;
-	/** This method returns the minimum/maximum amount of lookahead used
+	// This is tracked for the entire stream
+	overallMinMaxLookahead: Interval;
+	/**
+	 * This method returns the minimum/maximum amount of lookahead used
 	 * since the last reset.
 	 * @returns Amount of lookahead
 	 */

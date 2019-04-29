@@ -10,8 +10,8 @@ import { CommonToken } from "../../src/CommonToken";
 import { IncrementalParser } from "../../src/IncrementalParser";
 import {
 	IncrementalParserData,
-	TokenChangeType,
 } from "../../src/IncrementalParserData";
+import { TokenChangeType } from "../../src/TokenChange";
 import { IncrementalParserRuleContext } from "../../src/IncrementalParserRuleContext";
 import { IncrementalTokenStream } from "../../src/IncrementalTokenStream";
 import { XPath } from "../../src/tree/xpath/XPath";

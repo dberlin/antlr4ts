@@ -34,8 +34,11 @@ export class ANTLRInputStream implements LookaheadTrackingCharStream {
 	/** 0..n-1 index into string of next char */
 	protected p: number = 0;
 
-	/** Minumum/maximum amount of lookahead used since reset */
+	/** Minimum/maximum amount of lookahead used since reset */
 	protected _minMaxLookahead = Interval.of(0, 0);
+
+	/** Minimum/maximum amount of lookahead used over the entire stream.  */
+	protected _overallMinMaxLookahead = Interval.of(0, 0);
 
 	/** Last lookahead used. */
 	protected lastLA = 0;
@@ -79,6 +82,7 @@ export class ANTLRInputStream implements LookaheadTrackingCharStream {
 		if (i !== this.lastLA) {
 			this.lastLA = i;
 			this._minMaxLookahead = this._minMaxLookahead.union(Interval.of(i, i));
+			this._overallMinMaxLookahead = this._overallMinMaxLookahead.union(this._minMaxLookahead);
 		}
 		if (i < 0) {
 			i++; // e.g., translate LA(-1) to use offset i=0; then data[p+0-1]
@@ -170,12 +174,14 @@ export class ANTLRInputStream implements LookaheadTrackingCharStream {
 	@Override
 	public toString() { return this.data; }
 
-	@Override
+	public get overallMinMaxLookahead(): Interval {
+		return this._overallMinMaxLookahead;
+	}
+
 	public get minMaxLookahead(): Interval {
 		return this._minMaxLookahead;
 	}
 
-	@Override
 	public resetMinMaxLookahead(): void {
 		this._minMaxLookahead = Interval.of(0, 0);
 		this.lastLA = 0;

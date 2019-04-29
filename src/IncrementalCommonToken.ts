@@ -22,12 +22,12 @@ export class IncrementalCommonToken extends CommonToken {
 	 * of lookahead.
 	 */
 	protected readonly _minMaxLookahead?: Interval;
-	/**
-	 * Earliest token index that might be affected by a change to this token.
-	 */
-	public lookBehind: number;
 
+	/** The mark tells us whether a token was changed.  */
 	public marked: boolean = false;
+	/** We tombstone deleted tokens */
+	public deleted: boolean = false;
+
 	constructor(
 		type: number,
 		text?: string,

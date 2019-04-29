@@ -14,23 +14,11 @@ export class TextChange {
 	public start: number;
 	public oldEnd: number;
 	public newEnd: number;
-	/**
-	 * Check if an input position is contained within this TextChange.
-	 *
-	 * @param inputPos Input position to check
-	 * @return True if the input position is contained within the changed range.
-	 */
-	public contains(inputPos: number): boolean {
-		// For adds or changes, it's whether it's between start and newEnd,
-		// for removes, start and oldEnd.
-		if (inputPos >= this.start) {
-			if (this.newEnd !== 0) {
-				return inputPos <= this.newEnd;
-			} else {
-				return inputPos <= this.oldEnd;
-			}
-		}
-		return false;
+
+	constructor(start: number, oldEnd: number, newEnd: number) {
+		this.start = start;
+		this.oldEnd = oldEnd;
+		this.newEnd = newEnd;
 	}
 	/**
 	 * Return the amount a stream is offset by this TextChange.

@@ -5,16 +5,16 @@
 
 // ConvertTo-TS run at 2016-10-04T11:26:51.7913318-07:00
 
-import { Lexer } from "./Lexer";
-import { LookaheadTrackingCharStream } from "./LookaheadTrackingCharStream";
-import { TextChange } from "./TextChange";
+import { Override } from "./Decorators";
 import { IncrementalCommonToken } from "./IncrementalCommonToken";
 import { IncrementalCommonTokenFactory } from "./IncrementalCommonTokenFactory";
-import { Override } from "./Decorators";
-import { Token } from "./Token";
 import { IncrementalTokenFactory } from "./IncrementalTokenFactory";
-import { TokenChange, TokenChangeType } from "./TokenChange";
+import { Lexer } from "./Lexer";
+import { LookaheadTrackingCharStream } from "./LookaheadTrackingCharStream";
 import { Interval } from "./misc/Interval";
+import { TextChange } from "./TextChange";
+import { Token } from "./Token";
+import { TokenChange, TokenChangeType } from "./TokenChange";
 
 // A class that keeps track of offsets that need to be applied to reused tokens.
 class OffsetInfo {
@@ -29,9 +29,9 @@ export abstract class IncrementalLexer extends Lexer {
 	// TODO: Mark where newlines were affected
 
 	/* Current offsets to apply to reused tokens. */
-	private offsetInfo: OffsetInfo;
+	private offsetInfo: OffsetInfo = new OffsetInfo();
 	/* Index into the changed text range list. */
-	private changedRangeIndex: number = 0;
+	private changedRangeIndex: number = -1;
 	/* List of changed text ranges. */
 	private changedRanges: TextChange[] = [];
 
@@ -39,9 +39,20 @@ export abstract class IncrementalLexer extends Lexer {
 	private oldTokenIndex: number = 0;
 	protected oldTokens: IncrementalCommonToken[];
 	/* Set of token changes produced by this run of the lexer */
-	protected _tokenChanges: TokenChange[];
+	protected _tokenChanges: TokenChange[] = [];
 
+	/**
+	 * Construct an incremental lexer with no existing token state
+	 * @param input The input stream for the lexer.
+	 */
 	constructor(input: LookaheadTrackingCharStream);
+
+	/**
+	 *
+	 * @param input The input stream for the lexer.
+	 * @param oldTokens The list of tokens the lexer produced on the last run.
+	 * @param changeList The set of text changes that have occurred to the stream.
+	 */
 	constructor(
 		input: LookaheadTrackingCharStream,
 		oldTokens: IncrementalCommonToken[],
@@ -60,49 +71,61 @@ export abstract class IncrementalLexer extends Lexer {
 		this.tokenFactory = IncrementalCommonTokenFactory.DEFAULT;
 		if (oldTokens && changeList) {
 			this.oldTokens = oldTokens;
-			// Remove any EOF token at the end of the token list.
-			this.popEOFIfNeeded();
+			// Mark any EOF token at the end of the token list.
+			this.markEOFIfNeeded();
+			changeList.sort((a, b) => {
+				return a.start - b.start;
+			});
 			this.changedRanges = changeList;
 		}
 	}
 	/**
-	 *  Remove EOF token from token list.
+	 *  Mark EOF token as changed.
 	 *
-	 * The recognizers track whether they hit EOF and it is annoying to restore this state.
+	 * The various pieces track whether they hit EOF and it is annoying to restore this state everywhere it is tracked.
 	 * As such, we simply always let them hit EOF on their own again.
 	 */
-	private popEOFIfNeeded() {
+	private markEOFIfNeeded() {
 		if (this.oldTokens.length === 0) {
 			return;
 		}
 		if (this.oldTokens[this.oldTokens.length - 1].type === Token.EOF) {
-			this.oldTokens.pop();
+			this.oldTokens[this.oldTokens.length - 1].marked = true;
 		}
 	}
 
 	/**
-	 * Advance the current change so it is at or after the current place in the input stream.
+	 * Advance the current change to the latest in the list where inputPosition > startIndex.
+	 * Update offset info to be correct for the current place we are at.
 	 *
-	 * @return Return the current change or undefined if we ran out of changed.
 	 */
 	private advanceCurrentChange() {
 		if (!this.changedRanges || this.changedRanges.length === 0) {
-			return undefined;
+			return;
 		}
 		// Adjust the input place back into the old stream indexes
-		let currentInputPlace = this.charIndex + this.offsetInfo.charOffset;
-		let currentChange: TextChange = this.changedRanges[
-			this.changedRangeIndex
-		];
-		// Advance changed range if we moved past it.
-		while (!currentChange.contains(currentInputPlace)) {
-			++this.changedRangeIndex;
-			if (this.changedRangeIndex >= this.changedRanges.length) {
-				return undefined;
-			}
+		const currentInputPlace = this.charIndex + this.offsetInfo.charOffset;
+		let currentChange: TextChange | undefined;
+
+		if (this.changedRangeIndex >= 0) {
 			currentChange = this.changedRanges[this.changedRangeIndex];
 		}
-		return currentChange;
+		if (this.changedRangeIndex + 1 >= this.changedRanges.length) {
+			return;
+		}
+		let nextChange = this.changedRanges[this.changedRangeIndex + 1];
+		// Advance changed range to latest that is covered by input pos.
+		while (currentInputPlace >= nextChange.start) {
+			// Move to the next change
+			++this.changedRangeIndex;
+
+			this.offsetInfo.charOffset += nextChange.getOffset();
+			if (this.changedRangeIndex + 1 >= this.changedRanges.length) {
+				break;
+			}
+			nextChange = this.changedRanges[this.changedRangeIndex + 1];
+		}
+		return;
 	}
 
 	/**
@@ -112,12 +135,23 @@ export abstract class IncrementalLexer extends Lexer {
 	 */
 	private tokenInRange(token: IncrementalCommonToken, inputPos: number) {
 		// Adjust the input place back into the terms of the old stream indexes.
-		let adjustedInput = inputPos + this.offsetInfo.charOffset;
+		const adjustedInput = inputPos + this.offsetInfo.charOffset;
 		return (
-			inputPos >= token.startIndex + this.offsetInfo.charOffset &&
-			inputPos <= token.stopIndex + this.offsetInfo.charOffset
+			adjustedInput >= token.startIndex &&
+			adjustedInput <= token.stopIndex
 		);
 	}
+
+	/**
+	 * Check if the current input position is before the range of a given token.
+	 * @param token Token to check
+	 * @param inputPos Input position
+	 */
+	private tokenPastRange(token: IncrementalCommonToken, inputPos: number) {
+		const adjustedInput = inputPos + this.offsetInfo.charOffset;
+		return token.startIndex > adjustedInput;
+	}
+
 	/**
 	 * Advance the current place in the old token list until it is at least at the
 	 * current place in the input stream (adjusted for changed tokens).
@@ -125,10 +159,30 @@ export abstract class IncrementalLexer extends Lexer {
 	 * @return Return the current old token if it eixsts or undefined if we ran out.
 	 */
 	private advanceOldTokens() {
+		if (
+			this.oldTokens === undefined ||
+			this.oldTokens.length === 0 ||
+			this.oldTokenIndex >= this.oldTokens.length
+		) {
+			return undefined;
+		}
 		let currentOldToken: IncrementalCommonToken = this.oldTokens[
 			this.oldTokenIndex
 		];
-		while (!this.tokenInRange(currentOldToken, this.charIndex)) {
+
+		// Skip deleted tokens, and find the next token either in range or right past us.
+		while (
+			currentOldToken.deleted ||
+			(!this.tokenInRange(currentOldToken, this.charIndex) &&
+				!this.tokenPastRange(currentOldToken, this.charIndex))
+		) {
+			// Mark deleted tokens as removed
+			if (currentOldToken.deleted) {
+				this.tokenChanges.push({
+					changeType: TokenChangeType.REMOVED,
+					oldToken: currentOldToken,
+				});
+			}
 			++this.oldTokenIndex;
 			if (this.oldTokenIndex >= this.oldTokens.length) {
 				return undefined;
@@ -146,32 +200,41 @@ export abstract class IncrementalLexer extends Lexer {
 		t.stopIndex += this.offsetInfo.charOffset;
 		return t;
 	}
-	private reuseNextToken() {
-		if (
-			this.oldTokens === undefined ||
-			this.oldTokens.length === 0 ||
-			this.oldTokenIndex >= this.oldTokens.length
-		) {
-			return undefined;
-		}
-		let currentOldToken = this.advanceOldTokens();
-		if (!currentOldToken) {
-			return undefined;
-		}
+	/**
+	 * Get the old token that may or may not match up with our input index.
+	 *
+	 * @return The old token if one exists, or undefined.
+	 */
+	private getNextOldToken() {
+		const currentOldToken = this.advanceOldTokens();
+
 		return currentOldToken;
 	}
-
+	private getAdjustedStartOffset(tok: IncrementalCommonToken) {
+		return tok.startIndex + this.offsetInfo.charOffset;
+	}
 	@Override
 	public nextToken(): Token {
+		this.advanceCurrentChange();
 		let oldToken;
 		if (this.oldTokens) {
-			oldToken = this.reuseNextToken();
-			// If the token isn't marked, reuse it
-			if (oldToken && !oldToken.marked) {
-				this._input.seek(oldToken.stopIndex);
+			// This retrieves the next possible old token to reuse.
+			oldToken = this.getNextOldToken();
+			// If the token isn't marked, and starts where we need it to, reuse it
+			if (
+				oldToken &&
+				!oldToken.marked &&
+				this.getAdjustedStartOffset(oldToken) === this.charIndex
+			) {
+				let tokenStartMarker: number = this._input.mark();
+				this._input.seek(oldToken.stopIndex + 1);
 				this._interp.line = oldToken.line;
 				this._interp.charPositionInLine = oldToken.charPositionInLine;
-				return this.copyAndAdjustToken(oldToken);
+				this._input.release(tokenStartMarker);
+
+				return this.offsetInfo.charOffset === 0
+					? oldToken
+					: this.copyAndAdjustToken(oldToken);
 			}
 		}
 		// Before we call super, _token is the last token emitted.
@@ -182,12 +245,42 @@ export abstract class IncrementalLexer extends Lexer {
 
 		// See how old token compares to current token
 		if (oldToken) {
-			if (oldToken.startIndex === t.startIndex) {
+			oldToken.marked = false;
+			let adjustedStart =
+				oldToken.startIndex + this.offsetInfo.charOffset;
+			let adjustedStop = oldToken.stopIndex + this.offsetInfo.charOffset;
+			// See if nothing changed
+			if (
+				adjustedStart === t.startIndex &&
+				adjustedStop === t.stopIndex &&
+				oldToken.type === t.type &&
+				oldToken.text === t.text
+			) {
+				return t;
+			}
+			// See if the text or type changed
+			if (
+				(adjustedStart === t.startIndex &&
+					adjustedStop !== t.stopIndex) ||
+				(adjustedStart === t.startIndex &&
+					adjustedStop === t.stopIndex &&
+					(oldToken.type !== t.type || oldToken.text !== t.text))
+			) {
 				this._tokenChanges.push({
 					changeType: TokenChangeType.CHANGED,
 					newToken: t,
 					oldToken,
 				});
+			} else if (adjustedStart > this.charIndex) {
+				this._tokenChanges.push({
+					changeType: TokenChangeType.ADDED,
+					newToken: t,
+				});
+			} else if (
+				adjustedStart <= this.charIndex &&
+				adjustedStop >= this.charIndex
+			) {
+				console.log("Overlap");
 			}
 		}
 		return t;

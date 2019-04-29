@@ -29,6 +29,9 @@ export class CodePointCharStream implements LookaheadTrackingCharStream {
 	/** Minumum/maximum amount of lookahead used since reset */
 	protected _minMaxLookahead = Interval.of(0, 0);
 
+	/** Minimum/maximum amount of lookahead used over the entire stream.  */
+	protected _overallMinMaxLookahead = Interval.of(0, 0);
+
 	/** Last lookahead used. */
 	protected lastLA = 0;
 
@@ -132,6 +135,7 @@ export class CodePointCharStream implements LookaheadTrackingCharStream {
 		if (i !== this.lastLA) {
 			this.lastLA = i;
 			this._minMaxLookahead = this.minMaxLookahead.union(Interval.of(i, i));
+			this._overallMinMaxLookahead = this._overallMinMaxLookahead.union(this._minMaxLookahead);
 		}
 		switch (Math.sign(i)) {
 			case -1:
@@ -171,12 +175,14 @@ export class CodePointCharStream implements LookaheadTrackingCharStream {
 		}
 	}
 
-	@Override
+	public get overallMinMaxLookahead(): Interval {
+		return this._overallMinMaxLookahead;
+	}
+
 	public get minMaxLookahead(): Interval {
 		return this._minMaxLookahead;
 	}
 
-	@Override
 	public resetMinMaxLookahead(): void {
 		this._minMaxLookahead = Interval.of(0, 0);
 		this.lastLA = 0;
